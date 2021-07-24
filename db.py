@@ -97,7 +97,6 @@ class DataBase(object):
             last_offset += len(line)
         print('index_built_succ', self.data)
     
-    # TODO: doing compaction on same file may lose data if we suddenly have a power break
     def compact_log(self):
         self.f.seek(0)
         last_offset = 0
