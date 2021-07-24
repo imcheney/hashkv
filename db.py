@@ -5,13 +5,31 @@ import sys
 import io
 import os
 
-DB_FILE = 'db.data'
+METAINFO_FILE = 'db.metainfo'
+DATA_FILE_NAME_0 = 'db.data.0'
+DATA_FILE_NAME_1 = 'db.data.1'
+COMPACT_TRIGGER_SIZE = 150
 
 class DataBase(object):
     def __init__(self) -> None:
         super().__init__()
         self.data = {}
-        self.f = open(DB_FILE, 'a+')
+        
+        # address file name
+        metainfo_file = open(METAINFO_FILE, 'a+')
+        metainfo_file.seek(0)
+        data_file_name = metainfo_file.readline()
+        if not data_file_name:
+            data_file_name = DATA_FILE_NAME_0
+            metainfo_file.write(data_file_name)
+            metainfo_file.flush()
+        metainfo_file.close()
+        self.data_file_name = data_file_name.strip()
+
+        self.f = open(self.data_file_name, 'a+')
+        if not self.f:
+            print('DB filename error')
+            return
         self.build_index()
 
     def __del__(self) -> None:
@@ -33,6 +51,8 @@ class DataBase(object):
         self.data[key] = index
         print('file write index', index)
         print('\nDB RETURN', 'WRITE_OK', key, '\n')
+        if index >= COMPACT_TRIGGER_SIZE:
+            self.compact_log()
 
     def remove(self, key):
         if key not in self.data:
@@ -82,7 +102,7 @@ class DataBase(object):
         self.f.seek(0)
         last_offset = 0
         temp_compact_data = {}
-        print('compact_begin', os.path.getsize(DB_FILE))
+        print('compact_begin', os.path.getsize(self.data_file_name))
         for line in self.f:
             cmd, db_key, db_value = line.strip().split(',')
             if cmd == 'set':
@@ -92,15 +112,27 @@ class DataBase(object):
             last_offset += len(line)
         print('compact_data_to_write', temp_compact_data)
         self.f.close()
-        self.f = open(DB_FILE, 'w')  # change file open mode to truncate content
+        
+         # change file name
+        if self.data_file_name == DATA_FILE_NAME_0:
+            self.data_file_name = DATA_FILE_NAME_1
+        else:
+            self.data_file_name = DATA_FILE_NAME_0
+        self.f = open(self.data_file_name, 'w')  # change file open mode to truncate possible old content
         self.f.truncate()
         for k, v in temp_compact_data.items():
             self.write_file('set', k, v)
         self.f.flush()
         self.f.close()
-        self.f = open(DB_FILE, 'a+')    # reset to a+ mode
-        print('compact_end', os.path.getsize(DB_FILE))
-            
+
+        metainfo_file = open(METAINFO_FILE, 'w')
+        metainfo_file.write(self.data_file_name)
+        metainfo_file.flush()
+        metainfo_file.close()
+
+        # reset data file pointer
+        self.f = open(self.data_file_name, 'a+')    # reset to a+ mode
+        print('compact_end', os.path.getsize(self.data_file_name))
 
 
 if __name__ == '__main__':
